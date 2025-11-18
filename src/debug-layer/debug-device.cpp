@@ -824,7 +824,7 @@ Result DebugDevice::getCooperativeVectorProperties(CooperativeVectorProperties* 
     return baseObject->getCooperativeVectorProperties(properties, propertiesCount);
 }
 
-Result DebugDevice::computeCooperativeVectorMatrixSize(
+Result DebugDevice::getCooperativeVectorMatrixSize(
     uint32_t rowCount,
     uint32_t colCount,
     CooperativeVectorComponentType componentType,
@@ -834,8 +834,37 @@ Result DebugDevice::computeCooperativeVectorMatrixSize(
 )
 {
     SLANG_RHI_API_FUNC;
+
+    if (rowCount < 1 || rowCount > 128)
+    {
+        RHI_VALIDATION_ERROR("Row count must be in the range [1, 128]");
+        return SLANG_E_INVALID_ARG;
+    }
+    if (colCount < 1 || colCount > 128)
+    {
+        RHI_VALIDATION_ERROR("Column count must be in the range [1, 128]");
+        return SLANG_E_INVALID_ARG;
+    }
+    switch (layout)
+    {
+    case CooperativeVectorMatrixLayout::RowMajor:
+    case CooperativeVectorMatrixLayout::ColumnMajor:
+        break;
+    case CooperativeVectorMatrixLayout::InferencingOptimal:
+    case CooperativeVectorMatrixLayout::TrainingOptimal:
+        if (rowColumnStride != 0)
+        {
+            RHI_VALIDATION_ERROR("Row/Column stride must be zero for optimal layouts");
+            return SLANG_E_INVALID_ARG;
+        }
+        break;
+    default:
+        RHI_VALIDATION_ERROR("Invalid matrix layout");
+        return SLANG_E_INVALID_ARG;
+    }
+
     return baseObject
-        ->computeCooperativeVectorMatrixSize(rowCount, colCount, componentType, layout, rowColumnStride, outSize);
+        ->getCooperativeVectorMatrixSize(rowCount, colCount, componentType, layout, rowColumnStride, outSize);
 }
 
 Result DebugDevice::convertCooperativeVectorMatrix(
@@ -849,6 +878,22 @@ Result DebugDevice::convertCooperativeVectorMatrix(
 )
 {
     SLANG_RHI_API_FUNC;
+
+    if (!dstBuffer)
+    {
+        RHI_VALIDATION_ERROR("Destination buffer must be valid");
+        return SLANG_E_INVALID_ARG;
+    }
+    if (!srcBuffer)
+    {
+        RHI_VALIDATION_ERROR("Source buffer must be valid");
+        return SLANG_E_INVALID_ARG;
+    }
+
+    SLANG_RETURN_ON_FAIL(
+        validateConvertCooperativeVectorMatrix(ctx, dstBufferSize, dstDescs, srcBufferSize, srcDescs, matrixCount)
+    );
+
     return baseObject->convertCooperativeVectorMatrix(
         dstBuffer,
         dstBufferSize,
@@ -858,12 +903,6 @@ Result DebugDevice::convertCooperativeVectorMatrix(
         srcDescs,
         matrixCount
     );
-}
-
-Result DebugDevice::convertCooperativeVectorMatrix(const ConvertCooperativeVectorMatrixDesc* descs, uint32_t descCount)
-{
-    SLANG_RHI_API_FUNC;
-    return baseObject->convertCooperativeVectorMatrix(descs, descCount);
 }
 
 Result DebugDevice::createShaderTable(const ShaderTableDesc& desc, IShaderTable** outTable)
